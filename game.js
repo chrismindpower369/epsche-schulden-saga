@@ -1,126 +1,190 @@
-// Epsche Schulden Saga - Stickman Combat MVP
-// Phaser 3 Game Configuration
-
 const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'game-container',
-    backgroundColor: '#16213e',
-    scene: {
-        preload: preload,
-        create: create,
-        update: update
-    },
-    physics: {
-        default: 'arcade',
-        arcade: {
-            gravity: { y: 0 },
-            debug: false
-        }
-    }
+  type: Phaser.AUTO,
+  parent: 'game-container',
+  width: 900,
+  height: 620,
+  backgroundColor: '#11182f',
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 900,
+    height: 620
+  },
+  scene: { create }
 };
 
-const game = new Phaser.Game(config);
-
-// Game Variables
-let player;
-let enemy;
-let playerHP = 100;
-let enemyHP = 100;
-let playerHPBar;
-let enemyHPBar;
-let comboCount = 0;
-let comboText;
-let scoreText;
-let canAttack = true;
-let attackCooldown = 300;
-
-const enemyTypes = [
-    { name: 'Kreditkarte', hp: 100, damage: 15, color: 0xff6b6b },
-    { name: 'Mahnung', hp: 50, damage: 10, color: 0xffa502 },
-    { name: 'Uberziehungszinsen', hp: 200, damage: 8, color: 0xff7f50 }
-];
-
-let currentEnemy = enemyTypes[0];
-
-function preload() {
-    this.load.image('player', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iMTAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxjaXJjbGUgY3g9IjI1IiBjeT0iMTUiIHI9IjE1IiBmaWxsPSIjMDBmZmZmIi8+PHJlY3QgeD0iMTUiIHk9IjMwIiB3aWR0aD0iMjAiIGhlaWdodD0iNDAiIGZpbGw9IiMwMGZmZmYiLz48bGluZSB4MT0iMTUiIHkxPSIzNSIgeDI9IjUiIHkyPSI2MCIgc3Ryb2tlPSIjMDBmZmZmIiBzdHJva2Utd2lkdGg9IjUiLz48bGluZSB4MT0iMzUiIHkxPSIzNSIgeDI9IjQ1IiB5Mj0iNjAiIHN0cm9rZT0iIzAwZmZmZiIgc3Ryb2tlLXdpZHRoPSI1Ii8+PGxpbmUgeDE9IjIwIiB5MT0iNzAiIHgyPSIyMCIgeTI9IjEwMCIgc3Ryb2tlPSIjMDBmZmZmIiBzdHJva2Utd2lkdGg9IjUiLz48bGluZSB4MT0iMzAiIHkxPSI3MCIgeDI9IjMwIiB5Mj0iMTAwIiBzdHJva2U9IiMwMGZmZmYiIHN0cm9rZS13aWR0aD0iNSIvPjwvc3ZnPg==');
-    this.load.image('enemy', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iMTAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxjaXJjbGUgY3g9IjI1IiBjeT0iMTUiIHI9IjE1IiBmaWxsPSIjZmY2YjZiIi8+PHJlY3QgeD0iMTUiIHk9IjMwIiB3aWR0aD0iMjAiIGhlaWdodD0iNDAiIGZpbGw9IiNmZjZiNmIiLz48bGluZSB4MT0iMTUiIHkxPSIzNSIgeDI9IjUiIHkyPSI2MCIgc3Ryb2tlPSIjZmY2YjZiIiBzdHJva2Utd2lkdGg9IjUiLz48bGluZSB4MT0iMzUiIHkxPSIzNSIgeDI9IjQ1IiB5Mj0iNjAiIHN0cm9rZT0iI2ZmNmI2YiIgc3Ryb2tlLXdpZHRoPSI1Ii8+PGxpbmUgeDE9IjIwIiB5MT0iNzAiIHgyPSIyMCIgeTI9IjEwMCIgc3Ryb2tlPSIjZmY2YjZiIiBzdHJva2Utd2lkdGg9IjUiLz48bGluZSB4MT0iMzAiIHkxPSI3MCIgeDI9IjMwIiB5Mj0iMTAwIiBzdHJva2U9IiNmZjZiNmIiIHN0cm9rZS13aWR0aD0iNSIvPjwvc3ZnPg==');
-}
+new Phaser.Game(config);
 
 function create() {
-    this.add.text(400, 30, 'EPSCHE SCHULDEN SAGA', { fontSize: '28px', fill: '#00ffff', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(400, 55, 'Stickman Combat - Kapitel 1: Kreditkarte', { fontSize: '16px', fill: '#ffffff' }).setOrigin(0.5);
+  const scene = this;
+  let playerHP = 100;
+  let enemyHP = 100;
+  let combo = 0;
+  let totalDamage = 0;
+  let gameOver = false;
+  let lastAttackAt = 0;
 
-    player = this.add.sprite(200, 400, 'player').setScale(2);
-    enemy = this.add.sprite(600, 400, 'enemy').setScale(2);
+  const colors = {
+    cyan: 0x29e7ff,
+    red: 0xff5e6c,
+    green: 0x52e38f,
+    yellow: 0xffdd57,
+    dark: 0x11182f,
+    panel: 0x1a2547,
+    white: 0xf1f5ff
+  };
 
-    this.add.text(150, 250, 'DU', { fontSize: '18px', fill: '#00ffff', fontStyle: 'bold' }).setOrigin(0.5);
-    playerHPBar = this.add.rectangle(200, 280, 200, 20, 0x00ff00).setOrigin(0.5);
-    this.add.rectangle(200, 280, 200, 20, 0x000000).setStrokeStyle(2, 0xffffff).setOrigin(0.5);
+  scene.add.rectangle(450, 310, 900, 620, colors.dark);
+  scene.add.text(450, 34, 'EPSCHE SCHULDEN SAGA', {
+    fontFamily: 'Arial, sans-serif', fontSize: '32px', fontStyle: 'bold', color: '#29e7ff'
+  }).setOrigin(0.5);
+  scene.add.text(450, 76, 'Kapitel 1 · Kampf gegen die Kreditkarte', {
+    fontFamily: 'Arial, sans-serif', fontSize: '18px', color: '#dce8ff'
+  }).setOrigin(0.5);
+  scene.add.rectangle(450, 350, 820, 330, colors.panel, 0.86).setStrokeStyle(2, colors.cyan, 0.35);
 
-    this.add.text(600, 250, currentEnemy.name, { fontSize: '18px', fill: '#ff6b6b', fontStyle: 'bold' }).setOrigin(0.5);
-    enemyHPBar = this.add.rectangle(600, 280, 200, 20, 0xff0000).setOrigin(0.5);
-    this.add.rectangle(600, 280, 200, 20, 0x000000).setStrokeStyle(2, 0xffffff).setOrigin(0.5);
+  const player = drawStickman(scene, 220, 390, colors.cyan, false);
+  const enemy = drawStickman(scene, 680, 390, colors.red, true);
 
-    comboText = this.add.text(400, 350, 'Combo: 0x', { fontSize: '24px', fill: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5);
-    scoreText = this.add.text(400, 380, 'Schaden: 0', { fontSize: '18px', fill: '#ffffff' }).setOrigin(0.5);
-    this.add.text(400, 550, 'Klicke auf den Gegner zum Angreifen!', { fontSize: '16px', fill: '#aaaaaa' }).setOrigin(0.5);
+  scene.add.text(220, 165, 'DU', {
+    fontFamily: 'Arial, sans-serif', fontSize: '22px', fontStyle: 'bold', color: '#29e7ff'
+  }).setOrigin(0.5);
+  scene.add.text(680, 165, 'KREDITKARTE', {
+    fontFamily: 'Arial, sans-serif', fontSize: '22px', fontStyle: 'bold', color: '#ff5e6c'
+  }).setOrigin(0.5);
 
-    enemy.setInteractive({ useHandCursor: true });
-    enemy.on('pointerdown', () => { if (canAttack && enemyHP > 0) playerAttack(); });
+  const playerHPLabel = scene.add.text(220, 208, '100 / 100 HP', {
+    fontFamily: 'Arial, sans-serif', fontSize: '16px', color: '#ffffff'
+  }).setOrigin(0.5);
+  const enemyHPLabel = scene.add.text(680, 208, '100 / 100 HP', {
+    fontFamily: 'Arial, sans-serif', fontSize: '16px', color: '#ffffff'
+  }).setOrigin(0.5);
+  const playerBar = createHealthBar(scene, 220, 190, colors.green);
+  const enemyBar = createHealthBar(scene, 680, 190, colors.red);
 
-    this.time.addEvent({ delay: 2000, callback: enemyAttack, callbackScope: this, loop: true });
-}
+  const comboText = scene.add.text(450, 260, 'Combo: 0×', {
+    fontFamily: 'Arial, sans-serif', fontSize: '28px', fontStyle: 'bold', color: '#ffdd57'
+  }).setOrigin(0.5);
+  const damageText = scene.add.text(450, 298, 'Gesamtschaden: 0', {
+    fontFamily: 'Arial, sans-serif', fontSize: '18px', color: '#dce8ff'
+  }).setOrigin(0.5);
 
-function update() {
-    if (playerHP > 0 && enemyHP > 0) {
-        player.y = 400 + Math.sin(Date.now() / 500) * 5;
-        enemy.y = 400 + Math.sin(Date.now() / 500 + Math.PI) * 5;
-    }
-}
+  const attackButton = scene.add.rectangle(450, 540, 280, 58, colors.cyan, 1)
+    .setStrokeStyle(2, colors.white, 0.8).setInteractive({ useHandCursor: true });
+  const attackLabel = scene.add.text(450, 540, 'ANGREIFEN', {
+    fontFamily: 'Arial, sans-serif', fontSize: '24px', fontStyle: 'bold', color: '#10182f'
+  }).setOrigin(0.5);
+  scene.add.text(450, 590, 'Klicke auf den Gegner oder auf ANGRIFFEN.', {
+    fontFamily: 'Arial, sans-serif', fontSize: '16px', color: '#aab9d8'
+  }).setOrigin(0.5);
 
-function playerAttack() {
-    canAttack = false;
-    comboCount++;
-    const damage = 10 + (comboCount * 2);
+  enemy.setSize(130, 190).setInteractive({ useHandCursor: true });
+
+  const attack = () => {
+    if (gameOver) return;
+    const now = scene.time.now;
+    combo = now - lastAttackAt < 1500 ? combo + 1 : 1;
+    lastAttackAt = now;
+    const damage = Math.min(32, 8 + combo * 3);
+    totalDamage += damage;
     enemyHP = Math.max(0, enemyHP - damage);
-    comboText.setText('Combo: ' + comboCount + 'x');
-    scoreText.setText('Schaden: ' + (comboCount * 10));
-    enemyHPBar.width = (enemyHP / 100) * 200;
-    enemy.setTint(0xffffff);
-    this.time.delayedCall(100, () => { enemy.clearTint(); });
-    if (enemyHP <= 0) { victory(); return; }
-    this.time.delayedCall(attackCooldown, () => {
-        canAttack = true;
-        this.time.delayedCall(3000, () => { if (comboCount > 0) { comboCount = 0; comboText.setText('Combo: 0x'); } });
-    });
-}
-
-function enemyAttack() {
-    if (enemyHP > 0 && playerHP > 0) {
-        const damage = currentEnemy.damage;
-        playerHP = Math.max(0, playerHP - damage);
-        playerHPBar.width = (playerHP / 100) * 200;
-        player.setTint(0xff0000);
-        this.time.delayedCall(100, () => { player.clearTint(); });
-        if (playerHP <= 0) defeat();
+    comboText.setText(`Combo: ${combo}×`);
+    damageText.setText(`Gesamtschaden: ${totalDamage}`);
+    updateHealthBar(enemyBar, enemyHP);
+    enemyHPLabel.setText(`${enemyHP} / 100 HP`);
+    scene.tweens.add({ targets: enemy, x: enemy.x + 28, duration: 60, yoyo: true, repeat: 2 });
+    scene.cameras.main.flash(70, 255, 255, 255, false);
+    if (enemyHP <= 0) {
+      gameOver = true;
+      enemy.disableInteractive();
+      attackButton.disableInteractive();
+      attackButton.setFillStyle(colors.green);
+      attackLabel.setText('SIEG!');
+      showResult(scene, 'SIEG!', 'Kreditkarte besiegt. Du erhältst 50 XP.', '#52e38f', () => restart(scene));
     }
+  };
+
+  attackButton.on('pointerdown', attack);
+  enemy.on('pointerdown', attack);
+
+  scene.time.addEvent({
+    delay: 2000,
+    loop: true,
+    callback: () => {
+      if (gameOver) return;
+      const damage = 9;
+      playerHP = Math.max(0, playerHP - damage);
+      updateHealthBar(playerBar, playerHP);
+      playerHPLabel.setText(`${playerHP} / 100 HP`);
+      scene.tweens.add({ targets: player, x: player.x - 24, duration: 65, yoyo: true, repeat: 2 });
+      if (playerHP <= 0) {
+        gameOver = true;
+        enemy.disableInteractive();
+        attackButton.disableInteractive();
+        attackButton.setFillStyle(colors.red);
+        attackLabel.setText('NEUSTART');
+        showResult(scene, 'NIEDERLAGE', 'Die Kreditkarte war stärker. Starte neu und versuche es wieder.', '#ff5e6c', () => restart(scene));
+      }
+    }
+  });
+
+  scene.time.addEvent({
+    delay: 250,
+    loop: true,
+    callback: () => {
+      if (!gameOver && scene.time.now - lastAttackAt > 1500 && combo !== 0) {
+        combo = 0;
+        comboText.setText('Combo: 0×');
+      }
+    }
+  });
 }
 
-function victory() {
-    this.add.text(400, 300, 'SIEG!', { fontSize: '48px', fill: '#00ff00', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6 }).setOrigin(0.5);
-    this.add.text(400, 360, 'Kreditkarte besiegt!', { fontSize: '24px', fill: '#ffffff' }).setOrigin(0.5);
-    this.add.text(400, 420, 'Combo Bonus: ' + (comboCount * 5) + ' XP', { fontSize: '20px', fill: '#ffff00' }).setOrigin(0.5);
-    enemy.setTint(0x00ff00);
-    enemy.disableInteractive();
+function createHealthBar(scene, x, y, color) {
+  scene.add.rectangle(x, y, 250, 24, 0x090d1b).setStrokeStyle(2, 0xffffff, 0.7);
+  const fill = scene.add.rectangle(x - 123, y, 246, 18, color).setOrigin(0, 0.5);
+  return { fill };
 }
 
-function defeat() {
-    this.add.text(400, 300, 'NIEDERLAGE', { fontSize: '48px', fill: '#ff0000', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6 }).setOrigin(0.5);
-    this.add.text(400, 360, 'Die Schulden gewinnen...', { fontSize: '24px', fill: '#ffffff' }).setOrigin(0.5);
-    this.add.text(400, 420, 'Klicke zum Neustart', { fontSize: '18px', fill: '#aaaaaa' }).setOrigin(0.5);
-    player.setTint(0xff0000);
-    this.input.on('pointerdown', () => { location.reload(); });
+function updateHealthBar(bar, hp) {
+  bar.fill.width = 246 * Phaser.Math.Clamp(hp / 100, 0, 1);
+}
+
+function drawStickman(scene, x, y, color, facingLeft) {
+  const container = scene.add.container(x, y);
+  const graphics = scene.add.graphics();
+  const direction = facingLeft ? -1 : 1;
+  graphics.lineStyle(9, color, 1);
+  graphics.fillStyle(color, 1);
+  graphics.fillCircle(0, -70, 24);
+  graphics.lineBetween(0, -44, 0, 36);
+  graphics.lineBetween(0, -22, direction * 42, 5);
+  graphics.lineBetween(0, -22, direction * -36, 10);
+  graphics.lineBetween(0, 36, direction * 30, 88);
+  graphics.lineBetween(0, 36, direction * -30, 88);
+  container.add(graphics);
+  container.setSize(130, 190);
+  return container;
+}
+
+function showResult(scene, title, message, color, restart) {
+  const overlay = scene.add.container(450, 350);
+  const panel = scene.add.rectangle(0, 0, 580, 220, 0x090d1b, 0.96)
+    .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(color).color, 1);
+  const heading = scene.add.text(0, -55, title, {
+    fontFamily: 'Arial, sans-serif', fontSize: '46px', fontStyle: 'bold', color
+  }).setOrigin(0.5);
+  const body = scene.add.text(0, 0, message, {
+    fontFamily: 'Arial, sans-serif', fontSize: '19px', color: '#ffffff', align: 'center', wordWrap: { width: 500 }
+  }).setOrigin(0.5);
+  const button = scene.add.rectangle(0, 72, 190, 42, 0xffffff, 1).setInteractive({ useHandCursor: true });
+  const buttonLabel = scene.add.text(0, 72, 'NEU STARTEN', {
+    fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#10182f'
+  }).setOrigin(0.5);
+  button.on('pointerdown', restart);
+  overlay.add([panel, heading, body, button, buttonLabel]);
+}
+
+function restart(scene) {
+  scene.scene.restart();
 }
