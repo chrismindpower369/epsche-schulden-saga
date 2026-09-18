@@ -1,17 +1,19 @@
 /* ============================================================
    EPSCHE SCHULDEN SAGA — Side-Scroller Hack & Slash (Phaser 3)
-   Phase 1–3: Seitenansicht · Gravity · Gegner von rechts ·
-            Nahkampfangriff · XP/Level-System mit LocalStorage-Save
+   Phase 1–4: Seitenansicht · Gravity · Gegner von rechts ·
+            Nahkampfangriff · XP/Level mit Save · Feuerkünstler-Waffen
    ------------------------------------------------------------
    Tastatur:
      A / D  oder  ← / →    : laufen
      W / ↑ / Leertaste     : springen
      J / K                 : Nahkampfangriff
+     1–5 / Q               : Waffe wechseln
      R                     : Neustart (nach Niederlage)
    Gamepad:
      Linker Stick / D-Pad  : laufen
      A (unterer Button)    : springen
      X (linker Button)     : Nahkampfangriff (B funktioniert auch)
+     LB / RB               : Waffe wechseln
      Start                 : Neustart
    ============================================================ */
 
@@ -28,10 +30,8 @@ const ENEMY_BASE_SPEED = 70;
 const CONTACT_DAMAGE = 8;        // Schaden pro Berührung (mit i-Frames, statt -1 pro Frame)
 const INVULN_MS = 600;
 
-/* Phase 2: Angriff */
+/* Phase 2: Angriff (Basis; Waffen-Details siehe WEAPONS) */
 const ATTACK_DAMAGE = 10;
-const ATTACK_COOLDOWN_MS = 320;
-const ATTACK_HITBOX = { offX: 36, w: 56, h: 46 }; // vor dem Spieler, in Blickrichtung
 const ENEMY_MAX_HP = 30;
 const ENEMY_RESPAWN_MS = 1400;   // neue Kreditkarte läuft nach (Wellen folgen in Phase 5)
 const KNOCKBACK_X = 200;
@@ -45,6 +45,16 @@ const LEVEL_DMG_BONUS = 2;       // +2 Schaden pro Level
 const LEVEL_HP_BONUS = 10;       // +10 maxHP pro Level
 const LEVEL_SPEED_BONUS = 8;     // +8 px/s Laufspeed pro Level
 const SAVE_KEY = 'epsche-schulden-saga-save-v1';
+
+/* Phase 4: Feuerkünstler-Waffen (solange keine Sprites: Shapes + Tweens) */
+const WEAPONS = {
+  sword:   { name: 'Feuerschwert',   color: 0xff7a3c, offX: 38, w: 74,  h: 40, cooldown: 300, dmgMult: 1.0,  anim: 'slash' },
+  dragon:  { name: 'Dragon Staff',   color: 0xffd166, offX: 52, w: 96,  h: 28, cooldown: 460, dmgMult: 1.25, anim: 'spin'  },
+  contact: { name: 'Contact Staff',  color: 0xb28dff, offX: 44, w: 82,  h: 44, cooldown: 380, dmgMult: 1.1,  anim: 'spin'  },
+  poi:     { name: 'Poi',            color: 0x52e38f, offX: 34, w: 100, h: 66, cooldown: 520, dmgMult: 0.8,  anim: 'circle'},
+  dart:    { name: 'Rope Dart',      color: 0x29e7ff, offX: 62, w: 120, h: 16, cooldown: 600, dmgMult: 1.5,  anim: 'thrust'}
+};
+const WEAPON_ORDER = ['sword', 'dragon', 'contact', 'poi', 'dart'];
 
 const COLORS = {
   cyan:   0x29e7ff,
@@ -91,6 +101,10 @@ let swingId = 0;
 let kills = 0;
 let killsText = null;
 
+/* Phase 4: Waffenzustand */
+let currentWeapon = 'sword';
+let weaponText = null;
+
 /* Phase 3: XP-/Levelzustand (wird aus LocalStorage geladen) */
 let xp = 0;
 let level = 1;
@@ -118,6 +132,8 @@ class GameScene extends Phaser.Scene {
     activeScene = s;
 
     // Zustand zurücksetzen (auch nach Restart); Level/XP bleiben erhalten
+    enemy = null;                 // Referenz auf Objekte der alten Szene verwerfen
+    attackCooldownUntil = 0;
     playerMaxHP = playerMaxHp();
     playerHP = playerMaxHP;
     invulnUntil = 0;
@@ -156,7 +172,7 @@ class GameScene extends Phaser.Scene {
     s.physics.add.overlap(player, enemy, function () { damagePlayer(CONTACT_DAMAGE); });
 
     /* Eingaben */
-    keys = s.input.keyboard.addKeys('W,A,S,D,SPACE,J,K,R');
+    keys = s.input.keyboard.addKeys('W,A,S,D,SPACE,J,K,R,Q,ONE,TWO,THREE,FOUR,FIVE');
     cursors = s.input.keyboard.createCursorKeys();
     if (s.input.gamepad) {
       s.input.gamepad.removeAllListeners();
@@ -176,6 +192,11 @@ class GameScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#8fa3c8'
     }).setOrigin(1, 0).setDepth(5);
 
+    /* Waffen-HUD */
+    weaponText = s.add.text(24, 78, '', {
+      fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#ffd166'
+    }).setDepth(6);
+
     /* Level-/XP-HUD unter der HP-Leiste */
     levelText = s.add.text(24, 44, '', {
       fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#b28dff'
@@ -184,12 +205,13 @@ class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, COLORS.purple, 0.5).setDepth(5);
     xpBar = s.add.rectangle(24, 64, 216, 6, COLORS.purple).setOrigin(0, 0).setDepth(6);
     s.add.text(GAME_W / 2, GAME_H - 14,
-      'A/D laufen · W/↑/Leertaste springen · J/K angreifen · Gamepad: Stick + A springen, X angreifen',
+      'A/D laufen · W/↑/Leertaste springen · J/K angreifen · 1–5/Q Waffe · Gamepad: Stick, A springen, X angreifen, LB/RB Waffe',
       { fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#aab9d8' }
     ).setOrigin(0.5).setDepth(5);
 
     updateHPHud();
     updateXPText();
+    updateWeaponHud();
   }
 
   update(time, delta) {
@@ -234,6 +256,16 @@ class GameScene extends Phaser.Scene {
     /* Phase 2: Nahkampfangriff (Flankenerkennung) */
     const attackHeld = keys.J.isDown || keys.K.isDown || padDown(2) || padDown(1);
     if (edge('attack', attackHeld)) tryAttack();
+
+    /* Phase 4: Waffenwechsel — Tasten 1–5, Q = weiter, LB/RB am Gamepad */
+    if (edge('w1', keys.ONE.isDown)) switchWeapon('sword');
+    if (edge('w2', keys.TWO.isDown)) switchWeapon('dragon');
+    if (edge('w3', keys.THREE.isDown)) switchWeapon('contact');
+    if (edge('w4', keys.FOUR.isDown)) switchWeapon('poi');
+    if (edge('w5', keys.FIVE.isDown)) switchWeapon('dart');
+    if (edge('wCycle', keys.Q.isDown || padDown(4) || padDown(5))) {
+      switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(currentWeapon) + 1) % WEAPON_ORDER.length]);
+    }
 
     /* Gegner: horizontale Verfolgung (kommt von rechts) */
     if (enemy && enemy.body) {
@@ -308,39 +340,101 @@ function gameOver() {
   }).setOrigin(0.5).setDepth(11);
 }
 
-/* ---------- Phase 2: Angriff, Hitbox, Gegner-HP & Tod ---------- */
+/* ---------- Phase 2+4: Angriff, Hitbox, Waffen ---------- */
+function switchWeapon(id) {
+  if (!WEAPONS[id] || currentWeapon === id) return;
+  currentWeapon = id;
+  updateWeaponHud();
+  /* kleiner Wechsel-Effekt am Spieler */
+  if (player && activeScene) {
+    player.setFillStyle(WEAPONS[id].color);
+    activeScene.time.delayedCall(180, function () { if (player.active) player.setFillStyle(COLORS.cyan); });
+  }
+}
+
+function updateWeaponHud() {
+  if (weaponText) {
+    const w = WEAPONS[currentWeapon];
+    weaponText.setText('Waffe: ' + w.name + '  (1–5 / Q)');
+  }
+}
+
 function tryAttack() {
   const s = activeScene;
   if (!s || gameState !== 'play' || !player) return;
   const now = s.time.now;
+  const w = WEAPONS[currentWeapon];
   if (now < attackCooldownUntil) return;
-  attackCooldownUntil = now + ATTACK_COOLDOWN_MS;
+  attackCooldownUntil = now + w.cooldown;
   swingId++;
 
-  const hx = player.x + facing * ATTACK_HITBOX.offX;
+  const dmg = Math.round(playerDamage() * w.dmgMult);
+  const hx = player.x + facing * w.offX;
   const hy = player.y - 4;
 
-  /* sichtbarer Slash-Effekt */
-  const slash = s.add.rectangle(hx, hy, ATTACK_HITBOX.w - 10, 9, COLORS.yellow, 0.85).setDepth(4);
-  s.tweens.add({
-    targets: slash, alpha: 0, scaleX: 1.6, angle: facing * 24, duration: 150,
-    onComplete: function () { slash.destroy(); }
-  });
+  spawnWeaponFx(s, w, hx, hy);
 
   /* unsichtbare, kurzlebige Hitbox; trifft jeden Gegner max. 1× pro Schwung */
-  const hitbox = s.add.rectangle(hx, hy, ATTACK_HITBOX.w, ATTACK_HITBOX.h, 0xffffff, 0.001);
+  const hitbox = s.add.rectangle(hx, hy, w.w, w.h, 0xffffff, 0.001);
   s.physics.add.existing(hitbox);
   hitbox.body.setAllowGravity(false);
   const col = s.physics.add.overlap(hitbox, enemy, function () {
     if (enemy && enemy.active && enemy.lastSwingHit !== swingId) {
       enemy.lastSwingHit = swingId;
-      hitEnemy(enemy, playerDamage(), facing);
+      hitEnemy(enemy, dmg, facing);
     }
   });
   s.time.delayedCall(130, function () {
     if (col && col.active) s.physics.world.removeCollider(col);
     hitbox.destroy();
   });
+}
+
+/* Sichtbare Waffen-Effekte (Shapes + Tweens, bis echte Sprites kommen) */
+function spawnWeaponFx(s, w, hx, hy) {
+  const px = player.x, py = player.y - 4;
+
+  if (w.anim === 'slash') {
+    /* Feuerschwert: roter/orangener Balken schwingt vor den Spieler */
+    const fx = s.add.rectangle(hx, hy, w.w - 12, 10, w.color, 0.9).setDepth(4);
+    s.tweens.add({
+      targets: fx, alpha: 0, scaleX: 1.6, angle: facing * 26, duration: 160,
+      onComplete: function () { fx.destroy(); }
+    });
+  } else if (w.anim === 'spin') {
+    /* Staff: langes Rechteck rotiert um den Spieler */
+    for (let i = 0; i < 2; i++) {
+      const fx = s.add.rectangle(px, py, w.w - 20, 8, w.color, 0.9).setDepth(4).setAngle(i * 180);
+      s.tweens.add({
+        targets: fx, angle: fx.angle + facing * 360, alpha: 0, duration: 280, ease: 'Cubic.Out',
+        onComplete: function () { fx.destroy(); }
+      });
+    }
+  } else if (w.anim === 'circle') {
+    /* Poi: zwei Kreise kreisen um den Spieler */
+    const orb = { a: 0 };
+    const c1 = s.add.circle(px, py, 7, w.color, 0.95).setDepth(4);
+    const c2 = s.add.circle(px, py, 7, w.color, 0.95).setDepth(4);
+    const r = 48;
+    s.tweens.add({
+      targets: orb, a: facing * Math.PI * 2, duration: 320, ease: 'Cubic.Out',
+      onUpdate: function () {
+        if (!c1.active) return;
+        c1.setPosition(px + Math.cos(orb.a) * r, py + Math.sin(orb.a) * r * 0.55);
+        c2.setPosition(px - Math.cos(orb.a) * r, py - Math.sin(orb.a) * r * 0.55);
+      },
+      onComplete: function () { c1.destroy(); c2.destroy(); }
+    });
+  } else if (w.anim === 'thrust') {
+    /* Rope Dart: schmaler langer Strahl schießt nach vorn */
+    const fx = s.add.rectangle(px + facing * 8, py, w.w, 10, w.color, 0.9)
+      .setOrigin(0, 0.5).setDepth(4).setScale(0.25, 1);
+    if (facing < 0) fx.setAngle(180);
+    s.tweens.add({
+      targets: fx, scaleX: 1, alpha: 0, duration: 200, ease: 'Quad.Out',
+      onComplete: function () { fx.destroy(); }
+    });
+  }
 }
 
 function hitEnemy(e, dmg, dir) {
@@ -455,6 +549,8 @@ function resetSave() {
   updateXPText();
 }
 
+/* ---------- Phase 4: Waffen-Ende ---------- */
+
 /* ---------- Debug-/Test-Hook (für automatisierte Checks) ---------- */
 window.__saga = {
   get player() { return player; },
@@ -468,7 +564,8 @@ window.__saga = {
   get xp() { return xp; },
   get xpNext() { return xpToNext; },
   get wave() { return null; },
-  get weapon() { return null; },
+  get weapon() { return currentWeapon; },
+  setWeapon: function (id) { switchWeapon(id); },
   get kills() { return kills; },
   get enemyHp() { return enemy ? enemy.hp : null; },
   get dmg() { return playerDamage(); },
