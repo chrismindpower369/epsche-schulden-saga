@@ -1,50 +1,93 @@
-# 🎮 Epsche Schulden Saga
+# ⚔️ Epsche Schulden Saga
 
-**Interaktives Game: Stickman-Fight + RPG über Schuldenabbau, Selbstoptimierung und mystische Visionen**
+**Side-Scroller Hack & Slash im Stil von „Stick Fight: Shadow Warrior" — Stickman gegen die Schulden-Front: Kreditkarten, Mahnungen und Inkasso kommen in Wellen von rechts.**
 
-## 🚀 Quick Start
+Live spielen: https://chrismindpower369.github.io/epsche-schulden-saga/
 
-```bash
-git clone https://github.com/chrismindpower369/epsche-schulden-saga.git
-open index.html
+Gebaut mit [Phaser 3](https://phaser.io/) (Arcade Physics) — komplett ohne externe Assets, läuft direkt im Browser.
+
+## 🎮 Steuerung
+
+### Tastatur
+| Taste | Aktion |
+|---|---|
+| `A` / `D` oder `←` / `→` | Laufen |
+| `W` / `↑` / `Leertaste` | Springen |
+| `J` / `K` | Nahkampfangriff |
+| `1` – `5` | Waffe direkt wählen |
+| `Q` | Nächste Waffe |
+| `R` | Neustart (nach Niederlage) |
+
+### Gamepad
+| Eingabe | Aktion |
+|---|---|
+| Linker Stick / D-Pad | Laufen |
+| A (unterer Button) | Springen |
+| X oder B | Nahkampfangriff |
+| LB / RB | Waffe wechseln |
+| Start | Neustart |
+
+## 🔥 Feuerkünstler-Waffen
+
+Alle Waffen sind Currently Shapes + Tween-Animationen (Feuerstriche, rotierende Stäbe, kreisende Poi-Kugeln, schnelle Rope-Dart-Stöße). Echte Sprites können später 1:1 eingesetzt werden.
+
+| # | Waffe | Reichweite | Tempo | Schaden | Effekt |
+|---|---|---|---|---|---|
+| 1 | Feuerschwert | mittel | schnell | 1.0× | breiter Schwing-Bogen |
+| 2 | Dragon Staff | lang | mittel | 1.25× | 360°-Rotation |
+| 3 | Contact Staff | mittel | mittel | 1.1× | 360°-Rotation, breiter |
+| 4 | Poi | breit | langsam | 0.8× | zwei kreisende Feuerkugeln |
+| 5 | Rope Dart | sehr lang | langsam | 1.5× | Stöße nach vorn |
+
+## 📈 Level-System
+
+- Gegner geben XP; pro Level-Up: **+2 Schaden, +10 max HP, +8 Laufspeed**
+- Fortschritt (Level, XP, xpToNext) wird automatisch im **LocalStorage** gespeichert und beim nächsten Besuch fortgesetzt
+- Wellen-Bonus: Kapitelabschluss gibt Bonus-XP und heilt 20 % der max HP
+
+## 🌊 Gegner & Kapitel
+
+Gegner spawnen immer **rechts außerhalb des Bildes** und laufen nach links:
+
+| Gegner | HP | Tempo | XP |
+|---|---|---|---|
+| Kreditkarte | 30 | langsam | 12 |
+| Mahnung | 18 | schnell | 10 |
+| Inkasso | 80 | sehr langsam | 30 |
+
+Kapitel (Wellen):
+- **Kapitel 1:** 3× Kreditkarte
+- **Kapitel 2:** 3× Kreditkarte + 2× Mahnung
+- **Kapitel 3+:** Inkasso kommt ins Spiel; Gegner-HP steigt ab Kapitel 4 um 8 % pro Kapitel
+- Nach jedem Kapitel: Zusammenfassung (Bonus-XP, Heilung, Kills) und kurze Pause zum Waffenwechsel
+
+## 🛠️ Build & Deploy
+
+Kein Build-Schritt nötig — reines HTML/JS:
+
+```
+index.html   # Lädt Phaser 3.80.1 vom CDN und danach game.js
+game.js      # komplette Spiellogik (eine Datei)
 ```
 
-Oder direkt im Browser: https://chrismindpower369.github.io/epsche-schulden-saga
+**Lokal testen:**
+```bash
+python -m http.server 8000
+# → http://localhost:8000
+```
+(Direkt per `file://` öffnen funktioniert wegen des dynamischen Script-Loaders ebenfalls.)
 
-## 🎯 MVP Features
+**Deploy:** GitHub Pages ist auf `main` / `(root)` konfiguriert — jeder Push auf `main` deployt automatisch. Die Pages-Konfiguration bitte nicht ändern.
 
-- ✅ Stickman-Combat mit HP-Balken
-- ✅ Combo-System (mehr Klicks = mehr Schaden)
-- ✅ 1 Gegner (Kreditkarte)
-- ✅ Sieg/Niederlage
-- ✅ Idle-Animationen
+**Speicher zurücksetzen:** In der Browser-Konsole
+```js
+localStorage.removeItem('epsche-schulden-saga-save-v1');
+```
 
 ## 📋 Roadmap
 
-### Phase 1: MVP Stickman (Woche 1-2)
-- [x] Grundgeruest (Phaser 3, HTML)
-- [x] Combat-System
-- [ ] 3 Gegner
-- [ ] XP-System
-- [ ] Testing
+Die aktuelle Roadmap liegt im Notion-Board **„Epsche Schulden Saga – Roadmap"**.
 
-### Phase 2: MVP RPG (Woche 3-4)
-- [ ] Dialog-System
-- [ ] Kapitel 1, Szene 1-2
-- [ ] Atem-Uebung
-- [ ] Testing
+Umgesetzt (Phasen 1–5): Side-Scroller-Basis · Nahkampf-Hitboxen · XP/Level mit Save · 5 Feuerkünstler-Waffen · Wellen & Kapitel-Progression.
 
-### Phase 3: Integration (Woche 5)
-- [ ] Hauptmenue
-- [ ] Save/Load
-- [ ] Testing
-
-### Phase 4: Launch (Woche 6)
-- [ ] GitHub Pages
-- [ ] Feedback
-- [ ] Kapitel 2
-
-## 💰 Kosten
-
-- Low-Budget: 0-50 €/Monat
-- Comfort: 50-200 €/Monat
+Nächste Ideen: Sprite-Grafiken & Spritesheets statt Shapes · Sound/Musik · Boss-Gegner pro 5. Kapitel · Dodge/Dash ·/mobile Touch-Controls · Boss-Endgegner „Der Schuldenberg".
