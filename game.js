@@ -1,7 +1,7 @@
 /* ============================================================
    EPSCHE SCHULDEN SAGA — Side-Scroller Hack & Slash (Phaser 3)
-   Phase 1+2: Seitenansicht · Gravity · Boden & Plattformen ·
-            Springen · Gegner von rechts · Nahkampfangriff mit Hitbox
+   Phase 1–3: Seitenansicht · Gravity · Gegner von rechts ·
+            Nahkampfangriff · XP/Level-System mit LocalStorage-Save
    ------------------------------------------------------------
    Tastatur:
      A / D  oder  ← / →    : laufen
@@ -36,6 +36,15 @@ const ENEMY_MAX_HP = 30;
 const ENEMY_RESPAWN_MS = 1400;   // neue Kreditkarte läuft nach (Wellen folgen in Phase 5)
 const KNOCKBACK_X = 200;
 const KNOCKBACK_Y = -140;
+
+/* Phase 3: XP & Level */
+const ENEMY_XP = 12;             // XP pro Kill
+const LEVEL_BASE_XP = 40;        // XP für Level 1→2
+const LEVEL_XP_GROWTH = 1.35;    // xpToNext steigt pro Level
+const LEVEL_DMG_BONUS = 2;       // +2 Schaden pro Level
+const LEVEL_HP_BONUS = 10;       // +10 maxHP pro Level
+const LEVEL_SPEED_BONUS = 8;     // +8 px/s Laufspeed pro Level
+const SAVE_KEY = 'epsche-schulden-saga-save-v1';
 
 const COLORS = {
   cyan:   0x29e7ff,
@@ -82,6 +91,24 @@ let swingId = 0;
 let kills = 0;
 let killsText = null;
 
+/* Phase 3: XP-/Levelzustand (wird aus LocalStorage geladen) */
+let xp = 0;
+let level = 1;
+let xpToNext = LEVEL_BASE_XP;
+let levelText = null, xpBar = null, xpBarBg = null;
+
+/* Persistierten Fortschritt einmalig beim Laden des Spiels übernehmen */
+(function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (typeof d.level === 'number' && d.level >= 1) level = Math.min(50, Math.floor(d.level));
+    if (typeof d.xp === 'number' && d.xp >= 0) xp = Math.floor(d.xp);
+    if (typeof d.xpToNext === 'number' && d.xpToNext > 0) xpToNext = Math.floor(d.xpToNext);
+  } catch (e) { /* korrupte/gesperrte Daten ignorieren */ }
+})();
+
 /* ---------- Szene ---------- */
 class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
@@ -90,8 +117,8 @@ class GameScene extends Phaser.Scene {
     const s = this;
     activeScene = s;
 
-    // Zustand zurücksetzen (auch nach Restart)
-    playerMaxHP = 100;
+    // Zustand zurücksetzen (auch nach Restart); Level/XP bleiben erhalten
+    playerMaxHP = playerMaxHp();
     playerHP = playerMaxHP;
     invulnUntil = 0;
     gameState = 'play';
@@ -145,15 +172,24 @@ class GameScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#ffffff'
     }).setDepth(6);
     kills = 0;
-    killsText = s.add.text(GAME_W - 16, 18, 'Kills: 0 · Phase 2 · Hack & Slash', {
+    killsText = s.add.text(GAME_W - 16, 18, 'Kills: 0', {
       fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#8fa3c8'
     }).setOrigin(1, 0).setDepth(5);
+
+    /* Level-/XP-HUD unter der HP-Leiste */
+    levelText = s.add.text(24, 44, '', {
+      fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#b28dff'
+    }).setDepth(6);
+    xpBarBg = s.add.rectangle(22, 62, 220, 10, 0x000000, 0.55).setOrigin(0, 0)
+      .setStrokeStyle(1, COLORS.purple, 0.5).setDepth(5);
+    xpBar = s.add.rectangle(24, 64, 216, 6, COLORS.purple).setOrigin(0, 0).setDepth(6);
     s.add.text(GAME_W / 2, GAME_H - 14,
       'A/D laufen · W/↑/Leertaste springen · J/K angreifen · Gamepad: Stick + A springen, X angreifen',
       { fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#aab9d8' }
     ).setOrigin(0.5).setDepth(5);
 
     updateHPHud();
+    updateXPText();
   }
 
   update(time, delta) {
@@ -173,14 +209,15 @@ class GameScene extends Phaser.Scene {
 
     /* Spieler-Bewegung: nur X-Achse */
     let vx = 0;
-    if (keys.A.isDown || cursors.left.isDown) vx = -PLAYER_SPEED;
-    else if (keys.D.isDown || cursors.right.isDown) vx = PLAYER_SPEED;
+    const speed = playerSpeed();
+    if (keys.A.isDown || cursors.left.isDown) vx = -speed;
+    else if (keys.D.isDown || cursors.right.isDown) vx = speed;
 
     if (pad) {
       const ax = pad.axes.length > 0 ? pad.axes[0].getValue() : 0;
-      if (Math.abs(ax) > 0.15) vx = ax * PLAYER_SPEED;
-      if (padDown(14)) vx = -PLAYER_SPEED; // D-Pad links
-      if (padDown(15)) vx = PLAYER_SPEED;  // D-Pad rechts
+      if (Math.abs(ax) > 0.15) vx = ax * speed;
+      if (padDown(14)) vx = -speed; // D-Pad links
+      if (padDown(15)) vx = speed;  // D-Pad rechts
     }
     player.body.setVelocityX(vx);
     if (vx < 0) facing = -1; else if (vx > 0) facing = 1;
@@ -297,7 +334,7 @@ function tryAttack() {
   const col = s.physics.add.overlap(hitbox, enemy, function () {
     if (enemy && enemy.active && enemy.lastSwingHit !== swingId) {
       enemy.lastSwingHit = swingId;
-      hitEnemy(enemy, ATTACK_DAMAGE, facing);
+      hitEnemy(enemy, playerDamage(), facing);
     }
   });
   s.time.delayedCall(130, function () {
@@ -324,7 +361,8 @@ function killEnemy(e) {
   const s = activeScene;
   if (!s) return;
   kills++;
-  if (killsText) killsText.setText('Kills: ' + kills + ' · Phase 2 · Hack & Slash');
+  if (killsText) killsText.setText('Kills: ' + kills);
+  gainXP(ENEMY_XP);
   e.body.enable = false;
   (e.colliders || []).forEach(function (c) { if (c && c.active) s.physics.world.removeCollider(c); });
   if (e.hpBar) e.hpBar.destroy();
@@ -359,6 +397,64 @@ function spawnEnemy(s) {
   enemy.colliders.push(s.physics.add.overlap(player, enemy, function () { damagePlayer(CONTACT_DAMAGE); }));
 }
 
+/* ---------- Phase 3: XP, Level & Speicherung ---------- */
+function playerDamage() { return ATTACK_DAMAGE + (level - 1) * LEVEL_DMG_BONUS; }
+function playerSpeed()   { return PLAYER_SPEED + (level - 1) * LEVEL_SPEED_BONUS; }
+function playerMaxHp()   { return 100 + (level - 1) * LEVEL_HP_BONUS; }
+
+function gainXP(amount) {
+  xp += amount;
+  let leveled = false;
+  while (xp >= xpToNext) {
+    xp -= xpToNext;
+    level++;
+    xpToNext = Math.round(xpToNext * LEVEL_XP_GROWTH);
+    leveled = true;
+  }
+  if (leveled && player) {
+    playerMaxHP = playerMaxHp();
+    playerHP = Math.min(playerMaxHP, playerHP + LEVEL_HP_BONUS);
+    updateHPHud();
+    levelUpFx();
+  }
+  saveProgress();
+  updateXPText();
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ level: level, xp: xp, xpToNext: xpToNext }));
+  } catch (e) { /* z. B. privater Modus: Spiel läuft ohne Save weiter */ }
+}
+
+function updateXPText() {
+  if (levelText) levelText.setText('LV ' + level + ' · XP ' + xp + '/' + xpToNext);
+  if (xpBar) xpBar.scaleX = Math.max(0, Math.min(1, xp / xpToNext));
+}
+
+function levelUpFx() {
+  const s = activeScene;
+  if (!s || !player) return;
+  const t = s.add.text(player.x, player.y - 64, 'LEVEL UP! · LV ' + level, {
+    fontFamily: 'Arial, sans-serif', fontSize: '18px', fontStyle: 'bold', color: '#ffd166'
+  }).setOrigin(0.5).setDepth(7);
+  s.tweens.add({
+    targets: t, y: t.y - 42, alpha: 0, duration: 1100, ease: 'Quad.Out',
+    onComplete: function () { t.destroy(); }
+  });
+  player.setFillStyle(COLORS.yellow);
+  s.time.delayedCall(220, function () { if (player.active) player.setFillStyle(COLORS.cyan); });
+}
+
+function resetSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  level = 1; xp = 0; xpToNext = LEVEL_BASE_XP;
+  playerMaxHP = playerMaxHp();
+  playerHP = playerMaxHP;
+  updateHPHud();
+  updateXPText();
+}
+
 /* ---------- Debug-/Test-Hook (für automatisierte Checks) ---------- */
 window.__saga = {
   get player() { return player; },
@@ -368,11 +464,16 @@ window.__saga = {
   get maxHP() { return playerMaxHP; },
   get state() { return gameState; },
   get facing() { return facing; },
-  get level() { return null; },
+  get level() { return level; },
+  get xp() { return xp; },
+  get xpNext() { return xpToNext; },
   get wave() { return null; },
   get weapon() { return null; },
   get kills() { return kills; },
   get enemyHp() { return enemy ? enemy.hp : null; },
+  get dmg() { return playerDamage(); },
   attack: function () { tryAttack(); },
+  giveXP: function (n) { gainXP(n); },
+  resetSave: function () { resetSave(); },
   scene: function () { return activeScene; }
 };
