@@ -1,7 +1,7 @@
 /* ============================================================
    EPSCHE SCHULDEN SAGA — Side-Scroller Hack & Slash (Phaser 3)
-   Phase 1–4: Seitenansicht · Gravity · Gegner von rechts ·
-            Nahkampfangriff · XP/Level mit Save · Feuerkünstler-Waffen
+   Phase 1–5: Seitenansicht · Gravity · Gegner von rechts ·
+            Nahkampfangriff · XP/Level · Waffen · Wellen & Kapitel
    ------------------------------------------------------------
    Tastatur:
      A / D  oder  ← / →    : laufen
@@ -26,19 +26,27 @@ const GROUND_TOP = 480;          // y-Position der Bodenoberkante
 const GRAVITY = 900;
 const PLAYER_SPEED = 260;
 const JUMP_VELOCITY = 560;
-const ENEMY_BASE_SPEED = 70;
 const CONTACT_DAMAGE = 8;        // Schaden pro Berührung (mit i-Frames, statt -1 pro Frame)
 const INVULN_MS = 600;
 
 /* Phase 2: Angriff (Basis; Waffen-Details siehe WEAPONS) */
 const ATTACK_DAMAGE = 10;
-const ENEMY_MAX_HP = 30;
-const ENEMY_RESPAWN_MS = 1400;   // neue Kreditkarte läuft nach (Wellen folgen in Phase 5)
 const KNOCKBACK_X = 200;
 const KNOCKBACK_Y = -140;
 
+/* Phase 5: Gegnertypen & Wellen (Kapitel) */
+const ENEMY_TYPES = {
+  kk: { name: 'KREDITKARTE', w: 40, h: 26, hp: 30, speed: 70,  xp: 12, color: 0xff5e6c },
+  mh: { name: 'MAHNUNG',     w: 30, h: 22, hp: 18, speed: 135, xp: 10, color: 0xffd166 },
+  ik: { name: 'INKASSO',     w: 56, h: 44, hp: 80, speed: 45,  xp: 30, color: 0xb28dff }
+};
+const ENEMY_HP_GROWTH = 0.08;      // +8% Gegner-HP pro Kapitel ab Kapitel 4
+const WAVE_SPAWN_INTERVAL_MS = 900;
+const WAVE_INTERMISSION_MS = 4200;
+const WAVE_CLEAR_BONUS_XP = 15;
+const WAVE_CLEAR_HEAL = 0.2;       // 20% maxHP Heilung pro Kapitelabschluss
+
 /* Phase 3: XP & Level */
-const ENEMY_XP = 12;             // XP pro Kill
 const LEVEL_BASE_XP = 40;        // XP für Level 1→2
 const LEVEL_XP_GROWTH = 1.35;    // xpToNext steigt pro Level
 const LEVEL_DMG_BONUS = 2;       // +2 Schaden pro Level
@@ -70,7 +78,8 @@ const COLORS = {
 /* ---------- Spielzustand (Modul-Scope) ---------- */
 let activeScene = null;
 let player = null;
-let enemy = null;              // Phase 1: genau ein Gegner
+let enemies = [];              // Phase 5: alle aktiven Gegner der Welle
+let enemyGroup = null;
 let facing = 1;                // 1 = rechts, -1 = links
 let keys = null;
 let cursors = null;
@@ -105,6 +114,12 @@ let killsText = null;
 let currentWeapon = 'sword';
 let weaponText = null;
 
+/* Phase 5: Wellen-/Kapitelzustand */
+let waveIndex = 0;             // 0-basiert
+let waveQueue = [];
+let waveState = 'idle';        // 'idle' | 'running' | 'intermission'
+let waveText = null;
+
 /* Phase 3: XP-/Levelzustand (wird aus LocalStorage geladen) */
 let xp = 0;
 let level = 1;
@@ -132,7 +147,7 @@ class GameScene extends Phaser.Scene {
     activeScene = s;
 
     // Zustand zurücksetzen (auch nach Restart); Level/XP bleiben erhalten
-    enemy = null;                 // Referenz auf Objekte der alten Szene verwerfen
+    enemies = [];
     attackCooldownUntil = 0;
     playerMaxHP = playerMaxHp();
     playerHP = playerMaxHP;
@@ -161,15 +176,18 @@ class GameScene extends Phaser.Scene {
     player.body.setCollideWorldBounds(true);
     facing = 1;
 
-    /* Gegner: spawnt rechts außerhalb des sichtbaren Bereichs und läuft nach links */
-    spawnEnemy(s);
+    /* Gegner-Gruppe: alle Gegner einer Welle kommen von rechts */
+    enemyGroup = s.physics.add.group();
 
     /* Kollisionen */
     staticSolids.forEach(function (solid) {
       s.physics.add.collider(player, solid);
-      s.physics.add.collider(enemy, solid);
+      s.physics.add.collider(enemyGroup, solid);
     });
-    s.physics.add.overlap(player, enemy, function () { damagePlayer(CONTACT_DAMAGE); });
+    s.physics.add.overlap(player, enemyGroup, function (pl, en) { damagePlayer(CONTACT_DAMAGE); });
+
+    /* Kapitel 1 starten */
+    startWave(0);
 
     /* Eingaben */
     keys = s.input.keyboard.addKeys('W,A,S,D,SPACE,J,K,R,Q,ONE,TWO,THREE,FOUR,FIVE');
@@ -196,6 +214,11 @@ class GameScene extends Phaser.Scene {
     weaponText = s.add.text(24, 78, '', {
       fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#ffd166'
     }).setDepth(6);
+
+    /* Kapitel-Anzeige oben mittig */
+    waveText = s.add.text(GAME_W / 2, 18, '', {
+      fontFamily: 'Arial, sans-serif', fontSize: '14px', fontStyle: 'bold', color: '#29e7ff'
+    }).setOrigin(0.5).setDepth(6);
 
     /* Level-/XP-HUD unter der HP-Leiste */
     levelText = s.add.text(24, 44, '', {
@@ -225,7 +248,7 @@ class GameScene extends Phaser.Scene {
     }
     if (gameState === 'over') {
       player.body.setVelocity(0);
-      if (enemy && enemy.body) enemy.body.setVelocity(0);
+      enemies.forEach(function (e) { if (e.body) e.body.setVelocity(0); });
       return;
     }
 
@@ -267,23 +290,23 @@ class GameScene extends Phaser.Scene {
       switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(currentWeapon) + 1) % WEAPON_ORDER.length]);
     }
 
-    /* Gegner: horizontale Verfolgung (kommt von rechts) */
-    if (enemy && enemy.body) {
-      const dir = enemy.x > player.x ? -1 : 1;
-      enemy.body.setVelocityX(dir * ENEMY_BASE_SPEED);
-      enemy.kindLabel.setPosition(enemy.x, enemy.y - 26);
-      if (enemy.hpBarBg) {
-        enemy.hpBarBg.setPosition(enemy.x - 22, enemy.y - 44);
-        enemy.hpBar.setPosition(enemy.x - 22, enemy.y - 44);
+    /* Gegner: horizontale Verfolgung (alle kommen von rechts) */
+    enemies.forEach(function (e) {
+      if (!e.body) return;
+      const t = ENEMY_TYPES[e.etype];
+      const dir = e.x > player.x ? -1 : 1;
+      e.body.setVelocityX(dir * t.speed);
+      e.kindLabel.setPosition(e.x, e.y - t.h / 2 - 14);
+      if (e.hpBarBg) {
+        e.hpBarBg.setPosition(e.x - 22, e.y - t.h / 2 - 6);
+        e.hpBar.setPosition(e.x - 22, e.y - t.h / 2 - 6);
       }
       /* Sicherheitsnetz: Gegner darf nie unter die Welt fallen */
-      if (enemy.y > GAME_H + 300) {
-        enemy.setPosition(GAME_W + 60, GROUND_TOP - 40);
-        enemy.body.setVelocity(0, 0);
+      if (e.y > GAME_H + 300) {
+        e.setPosition(GAME_W + 60, GROUND_TOP - t.h / 2);
+        e.body.setVelocity(0, 0);
       }
-      /* Falls der Gegner links aus dem Bild läuft: von rechts neu anlaufen lassen */
-      if (enemy.x < -60) enemy.setPosition(GAME_W + 60, GROUND_TOP - 40);
-    }
+    });
   }
 }
 
@@ -378,10 +401,10 @@ function tryAttack() {
   const hitbox = s.add.rectangle(hx, hy, w.w, w.h, 0xffffff, 0.001);
   s.physics.add.existing(hitbox);
   hitbox.body.setAllowGravity(false);
-  const col = s.physics.add.overlap(hitbox, enemy, function () {
-    if (enemy && enemy.active && enemy.lastSwingHit !== swingId) {
-      enemy.lastSwingHit = swingId;
-      hitEnemy(enemy, dmg, facing);
+  const col = s.physics.add.overlap(hitbox, enemyGroup, function (hb, en) {
+    if (en && en.active && en.lastSwingHit !== swingId) {
+      en.lastSwingHit = swingId;
+      hitEnemy(en, dmg, facing);
     }
   });
   s.time.delayedCall(130, function () {
@@ -448,7 +471,7 @@ function hitEnemy(e, dmg, dir) {
 }
 
 function updateEnemyBar(e) {
-  if (e.hpBar) e.hpBar.scaleX = Math.max(0, e.hp / ENEMY_MAX_HP);
+  if (e.hpBar) e.hpBar.scaleX = Math.max(0, e.hp / e.hpMax);
 }
 
 function killEnemy(e) {
@@ -456,39 +479,132 @@ function killEnemy(e) {
   if (!s) return;
   kills++;
   if (killsText) killsText.setText('Kills: ' + kills);
-  gainXP(ENEMY_XP);
+  gainXP(ENEMY_TYPES[e.etype].xp);
+  const idx = enemies.indexOf(e);
+  if (idx !== -1) enemies.splice(idx, 1);
+  if (enemyGroup) enemyGroup.remove(e);
   e.body.enable = false;
-  (e.colliders || []).forEach(function (c) { if (c && c.active) s.physics.world.removeCollider(c); });
   if (e.hpBar) e.hpBar.destroy();
   if (e.hpBarBg) e.hpBarBg.destroy();
   if (e.kindLabel) e.kindLabel.destroy();
   e.hpBar = e.hpBarBg = null;
-  if (enemy === e) enemy = null;
   /* Todesanimation: verblassen + kippen */
   s.tweens.add({
     targets: e, alpha: 0, angle: (Math.random() < 0.5 ? -1 : 1) * 50, duration: 280,
     ease: 'Quad.Out',
     onComplete: function () { e.destroy(); }
   });
-  /* Nächste Kreditkarte läuft nach (bis Phase 5 richtige Wellen kommen) */
-  s.time.delayedCall(ENEMY_RESPAWN_MS, function () {
-    if (gameState === 'play' && activeScene === s) spawnEnemy(s);
-  });
+  checkWaveClear();
 }
 
-function spawnEnemy(s) {
-  if (!s || enemy) return;
-  enemy = s.add.rectangle(GAME_W + 60, GROUND_TOP - 40, 40, 26, COLORS.red);
-  s.physics.add.existing(enemy);
-  enemy.hp = ENEMY_MAX_HP;
-  enemy.kindLabel = s.add.text(enemy.x, enemy.y - 30, 'KREDITKARTE', {
-    fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#ff5e6c'
+/* ---------- Phase 5: Wellen & Kapitel ---------- */
+function waveComposition(n) {   // n = 1-basierte Kapitelnummer
+  const list = [];
+  if (n === 1) {
+    list.push('kk', 'kk', 'kk');
+  } else if (n === 2) {
+    list.push('kk', 'mh', 'kk', 'mh', 'kk');
+  } else if (n === 3) {
+    list.push('mh', 'kk', 'ik', 'kk', 'mh', 'mh');
+  } else {
+    const k = Math.min(2 + (n - 3), 6);
+    const m = Math.min(n - 1, 6);
+    const t = Math.min(Math.floor((n - 1) / 2), 3);
+    for (let i = 0; i < k; i++) list.push('kk');
+    for (let i = 0; i < m; i++) list.push('mh');
+    for (let i = 0; i < t; i++) list.push('ik');
+  }
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+  }
+  return list;
+}
+
+function startWave(n) {
+  const s = activeScene;
+  if (!s) return;
+  waveIndex = n;
+  waveState = 'running';
+  waveQueue = waveComposition(n + 1);
+  if (waveText) waveText.setText('Kapitel ' + (n + 1));
+  /* Kapitel-Banner einblenden */
+  const banner = s.add.text(GAME_W / 2, 150, 'KAPITEL ' + (n + 1), {
+    fontFamily: 'Arial, sans-serif', fontSize: '34px', fontStyle: 'bold', color: '#29e7ff'
+  }).setOrigin(0.5).setDepth(8);
+  s.tweens.add({
+    targets: banner, alpha: 0, y: 120, duration: 1500, delay: 600, ease: 'Quad.Out',
+    onComplete: function () { banner.destroy(); }
+  });
+  spawnFromQueue(s);
+}
+
+function spawnFromQueue(s) {
+  if (gameState !== 'play' || waveState !== 'running') return;
+  const type = waveQueue.shift();
+  if (type) {
+    spawnEnemy(s, type);
+    if (waveQueue.length > 0) {
+      s.time.delayedCall(WAVE_SPAWN_INTERVAL_MS, function () { spawnFromQueue(s); });
+    }
+  }
+}
+
+function spawnEnemy(s, typeId) {
+  if (!s) return;
+  const t = ENEMY_TYPES[typeId];
+  const chapter = waveIndex + 1;
+  const scaleHp = 1 + (chapter >= 4 ? (chapter - 3) * ENEMY_HP_GROWTH : 0);
+  const hp = Math.round(t.hp * scaleHp);
+  const e = s.add.rectangle(GAME_W + 60, GROUND_TOP - t.h / 2, t.w, t.h, t.color);
+  s.physics.add.existing(e);
+  e.etype = typeId;
+  e.hp = hp;
+  e.hpMax = hp;
+  e.kindLabel = s.add.text(e.x, e.y - t.h / 2 - 14, t.name, {
+    fontFamily: 'Arial, sans-serif', fontSize: '11px',
+    color: '#' + t.color.toString(16).padStart(6, '0')
   }).setOrigin(0.5);
-  enemy.hpBarBg = s.add.rectangle(enemy.x - 22, enemy.y - 44, 44, 5, 0x000000, 0.5).setOrigin(0, 0.5).setDepth(3);
-  enemy.hpBar = s.add.rectangle(enemy.x - 22, enemy.y - 44, 44, 5, COLORS.red).setOrigin(0, 0.5).setDepth(4);
-  /* Kollisionen mit Boden/Plattformen + Kontaktschaden am Spieler neu registrieren */
-  enemy.colliders = staticSolids.map(function (solid) { return s.physics.add.collider(enemy, solid); });
-  enemy.colliders.push(s.physics.add.overlap(player, enemy, function () { damagePlayer(CONTACT_DAMAGE); }));
+  e.hpBarBg = s.add.rectangle(e.x - 22, e.y - t.h / 2 - 6, 44, 5, 0x000000, 0.5).setOrigin(0, 0.5).setDepth(3);
+  e.hpBar = s.add.rectangle(e.x - 22, e.y - t.h / 2 - 6, 44, 5, COLORS.red).setOrigin(0, 0.5).setDepth(4);
+  enemies.push(e);
+  enemyGroup.add(e);   /* Kollision & Overlaps laufen über die Gruppe */
+}
+
+function checkWaveClear() {
+  if (waveState !== 'running') return;
+  if (waveQueue.length > 0 || enemies.length > 0) return;
+  chapterComplete();
+}
+
+function chapterComplete() {
+  const s = activeScene;
+  if (!s || gameState !== 'play') return;
+  waveState = 'intermission';
+  const bonus = WAVE_CLEAR_BONUS_XP + waveIndex * 5;
+  gainXP(bonus);
+  const heal = Math.round(playerMaxHP * WAVE_CLEAR_HEAL);
+  playerHP = Math.min(playerMaxHP, playerHP + heal);
+  updateHPHud();
+  /* Kapitel-Abschluss-Panel */
+  const panel = s.add.rectangle(GAME_W / 2, GAME_H / 2, 480, 156, 0x000000, 0.72)
+    .setStrokeStyle(2, COLORS.cyan, 0.6).setDepth(9);
+  const t1 = s.add.text(GAME_W / 2, GAME_H / 2 - 42, 'KAPITEL ' + (waveIndex + 1) + ' GESCHAFFT!', {
+    fontFamily: 'Arial, sans-serif', fontSize: '26px', fontStyle: 'bold', color: '#52e38f'
+  }).setOrigin(0.5).setDepth(10);
+  const t2 = s.add.text(GAME_W / 2, GAME_H / 2 + 2,
+    'Bonus: +' + bonus + ' XP · +' + heal + ' HP · Kills: ' + kills, {
+    fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#dce8ff'
+  }).setOrigin(0.5).setDepth(10);
+  const t3 = s.add.text(GAME_W / 2, GAME_H / 2 + 38,
+    'Waffe wechseln (1–5/Q) … nächstes Kapitel startet gleich', {
+    fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#8fa3c8'
+  }).setOrigin(0.5).setDepth(10);
+  s.time.delayedCall(WAVE_INTERMISSION_MS, function () {
+    if (gameState !== 'play' || activeScene !== s) return;
+    [panel, t1, t2, t3].forEach(function (o) { o.destroy(); });
+    startWave(waveIndex + 1);
+  });
 }
 
 /* ---------- Phase 3: XP, Level & Speicherung ---------- */
@@ -554,8 +670,8 @@ function resetSave() {
 /* ---------- Debug-/Test-Hook (für automatisierte Checks) ---------- */
 window.__saga = {
   get player() { return player; },
-  get enemy() { return enemy; },
-  get enemies() { return enemy ? [enemy] : []; },
+  get enemy() { return enemies.length ? enemies[enemies.length - 1] : null; },
+  get enemies() { return enemies.slice(); },
   get hp() { return playerHP; },
   get maxHP() { return playerMaxHP; },
   get state() { return gameState; },
@@ -563,13 +679,15 @@ window.__saga = {
   get level() { return level; },
   get xp() { return xp; },
   get xpNext() { return xpToNext; },
-  get wave() { return null; },
+  get wave() { return waveIndex + 1; },
+  get waveState() { return waveState; },
   get weapon() { return currentWeapon; },
   setWeapon: function (id) { switchWeapon(id); },
   get kills() { return kills; },
-  get enemyHp() { return enemy ? enemy.hp : null; },
+  get enemyHp() { return enemies.length ? enemies[enemies.length - 1].hp : null; },
   get dmg() { return playerDamage(); },
   attack: function () { tryAttack(); },
+  waveComposition: function (n) { return waveComposition(n); },
   giveXP: function (n) { gainXP(n); },
   resetSave: function () { resetSave(); },
   scene: function () { return activeScene; }
