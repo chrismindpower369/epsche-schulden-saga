@@ -27,8 +27,29 @@ Saga.Input = (function () {
     ['FIVE', 'dart']
   ];
 
+  /* Der Griff auf das Gamepad: normalerweise setzt ihn das 'connected'-Event.
+     Ein Pad, das Phaser schon kennt, dessen Event aber vor dem Binden gefeuert hat
+     (Controller beim Laden der Seite angeschlossen), wird hier nachgeholt — aber nur,
+     solange der Browser es noch führt: nach dem Abstecken behält Phaser den Wrapper
+     mit eingefrorenen Werten, und der darf den Griff nicht wiederbeleben. */
+  function livePad() {
+    var S = Saga.State;
+    if (S.pad) return S.pad;
+    var plugin = S.scene && S.scene.input && S.scene.input.gamepad;
+    var candidate = plugin && plugin.pad1;
+    if (!candidate || !navigator.getGamepads) return null;
+    var pads = navigator.getGamepads();
+    for (var i = 0; pads && i < pads.length; i++) {
+      if (pads[i] && pads[i].index === candidate.index) {
+        S.pad = candidate;
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   function padDown(index) {
-    var pad = Saga.State.pad;
+    var pad = livePad();
     return !!(pad && pad.buttons[index] && pad.buttons[index].pressed);
   }
 
@@ -98,7 +119,7 @@ Saga.Input = (function () {
 
     /* Linker Stick, X-Achse (0 ohne Gamepad) */
     padAxisX: function () {
-      var pad = Saga.State.pad;
+      var pad = livePad();
       if (!pad) return 0;
       return pad.axes.length > 0 ? pad.axes[0].getValue() : 0;
     }
