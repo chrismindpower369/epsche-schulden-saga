@@ -58,6 +58,12 @@ Saga.Input = (function () {
       if (scene.input.gamepad) {
         scene.input.gamepad.removeAllListeners();
         scene.input.gamepad.on('connected', function (p) { Saga.State.pad = p; });
+        /* Beim Trennen den Griff lösen: Phaser behält den Gamepad-Wrapper und
+           friert dessen letzte Werte ein, sonst läuft der Stickman mit dem
+           zuletzt gehaltenen Stick/Steuerkreuz endlos weiter. */
+        scene.input.gamepad.on('disconnected', function (p) {
+          if (!p || p === Saga.State.pad) Saga.State.pad = null;
+        });
         if (scene.input.gamepad.pad1) Saga.State.pad = scene.input.gamepad.pad1;  /* falls schon verbunden */
       }
     },
