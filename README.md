@@ -66,9 +66,24 @@ Kapitel (Wellen):
 Kein Build-Schritt nötig — reines HTML/JS:
 
 ```
-index.html   # Lädt Phaser 3.80.1 vom CDN und danach game.js
-game.js      # komplette Spiellogik (eine Datei)
+index.html   # Lädt Phaser 3.80.1 vom CDN und danach die Module aus js/
+js/data.js      # feste Werte: Konfiguration, Gegnertypen, Waffen, Farben
+js/state.js     # einziger Eigentümer des Laufzeit-Zustands
+js/save.js      # LocalStorage (Fortschritt speichern/laden)
+js/input.js     # Tastatur & Gamepad -> Absichten
+js/hud.js       # alle Bildschirm-Elemente (Leisten, Texte, Panels)
+js/progress.js  # XP, Level, abgeleitete Spielerwerte
+js/player.js    # Bewegung, Sprung, Angriff, Waffen, Schadenseingang
+js/enemies.js   # Gegner erzeugen, verfolgen, treffen, töten
+js/waves.js     # Kapitel-/Wellenablauf
+js/scene.js     # Szenen-Lebenszyklus (Welt, Kollisionen, Aufbau)
+js/debug.js     # Test-Hook window.__saga
+js/main.js      # Phaser-Konfiguration und Start
 ```
+
+Die Dateien werden als klassische Skripte in dieser Reihenfolge geladen (kein Build,
+keine ES-Module) — deshalb genügt es, `?v=` in `index.html` zu erhöhen, wenn sich eine
+Datei ändert, damit Browser nicht die alte Fassung aus dem Cache laden.
 
 **Lokal testen:**
 ```bash

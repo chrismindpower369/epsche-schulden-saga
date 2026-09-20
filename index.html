@@ -51,6 +51,26 @@
 
   <!-- Phaser 3 von CDN laden -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script>
+    if (typeof Phaser !== "undefined") {
+      document.getElementById("status").textContent = "Phaser geladen – Spiel startet …";
+    }
+  </script>
+
+  <!-- Spielmodule: klassische Skripte in Abhängigkeitsreihenfolge.
+       Kein Build-Schritt, läuft auch direkt von der Festplatte (file://). -->
+  <script src="./js/data.js?v=r1"></script>
+  <script src="./js/state.js?v=r1"></script>
+  <script src="./js/save.js?v=r1"></script>
+  <script src="./js/input.js?v=r1"></script>
+  <script src="./js/hud.js?v=r1"></script>
+  <script src="./js/progress.js?v=r1"></script>
+  <script src="./js/player.js?v=r1"></script>
+  <script src="./js/enemies.js?v=r1"></script>
+  <script src="./js/waves.js?v=r1"></script>
+  <script src="./js/scene.js?v=r1"></script>
+  <script src="./js/debug.js?v=r1"></script>
+  <script src="./js/main.js?v=r1"></script>
 
   <script>
     // Fehler direkt auf der Seite anzeigen
@@ -69,17 +89,15 @@
         return;
       }
 
-      status.textContent = "Phaser geladen – Spiel startet …";
+      // Alle Module müssen da sein, sonst fehlt eine Datei
+      const modules = ["Data", "State", "Save", "Input", "Hud", "Progress", "Player", "Enemies", "Waves", "Scene"];
+      const missing = !window.Saga ? modules : modules.filter(function (name) { return !window.Saga[name]; });
+      if (missing.length) {
+        status.textContent = "Spielmodule konnten nicht geladen werden: " + missing.join(", ");
+        return;
+      }
 
-      const script = document.createElement("script");
-      script.src = "./game.js?v=side2";
-      script.onload = function () {
-        status.textContent = "Spiel geladen";
-      };
-      script.onerror = function () {
-        status.textContent = "game.js konnte nicht geladen werden.";
-      };
-      document.body.appendChild(script);
+      status.textContent = "Spiel geladen";
     });
   </script>
 </body>
