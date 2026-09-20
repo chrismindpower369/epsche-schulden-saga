@@ -32,6 +32,7 @@ const INVULN_MS = 600;
 /* Phase 2: Angriff (Basis; Waffen-Details siehe WEAPONS) */
 const ATTACK_DAMAGE = 10;
 const KNOCKBACK_X = 200;
+const HIT_STUN_MS = 220;         // kurze Betäubung, damit der Knockback nicht sofort überschrieben wird
 const KNOCKBACK_Y = -140;
 
 /* Phase 5: Gegnertypen & Wellen (Kapitel) */
@@ -148,6 +149,9 @@ class GameScene extends Phaser.Scene {
 
     // Zustand zurücksetzen (auch nach Restart); Level/XP bleiben erhalten
     enemies = [];
+    /* Referenzen der vorherigen Szene verwerfen: nach scene.restart zeigen sie auf
+       zerstörte Objekte, in die startWave()/HUD sonst hineinschreiben. */
+    hpBar = hpBarBg = hpText = killsText = weaponText = waveText = levelText = xpBar = xpBarBg = null;
     attackCooldownUntil = 0;
     playerMaxHP = playerMaxHp();
     playerHP = playerMaxHP;
@@ -186,8 +190,7 @@ class GameScene extends Phaser.Scene {
     });
     s.physics.add.overlap(player, enemyGroup, function (pl, en) { damagePlayer(CONTACT_DAMAGE); });
 
-    /* Kapitel 1 starten */
-    startWave(0);
+    /* Kapitel 1 wird erst nach dem HUD-Aufbau gestartet (siehe unten) */
 
     /* Eingaben */
     keys = s.input.keyboard.addKeys('W,A,S,D,SPACE,J,K,R,Q,ONE,TWO,THREE,FOUR,FIVE');
@@ -235,6 +238,9 @@ class GameScene extends Phaser.Scene {
     updateHPHud();
     updateXPText();
     updateWeaponHud();
+
+    /* Kapitel 1 starten — erst jetzt, damit Kapitel-Label und HUD existieren */
+    startWave(0);
   }
 
   update(time, delta) {
@@ -295,7 +301,7 @@ class GameScene extends Phaser.Scene {
       if (!e.body) return;
       const t = ENEMY_TYPES[e.etype];
       const dir = e.x > player.x ? -1 : 1;
-      e.body.setVelocityX(dir * t.speed);
+      if (!e.stunUntil || s.time.now >= e.stunUntil) e.body.setVelocityX(dir * t.speed);
       e.kindLabel.setPosition(e.x, e.y - t.h / 2 - 14);
       if (e.hpBarBg) {
         e.hpBarBg.setPosition(e.x - 22, e.y - t.h / 2 - 6);
@@ -345,6 +351,7 @@ function damagePlayer(amount) {
 }
 
 function updateHPHud() {
+  if (!hpBar || !hpText) return;   // Szene (noch) nicht vollständig aufgebaut
   const pct = Math.max(0, playerHP / playerMaxHP);
   hpBar.setSize(Math.round(216 * pct), 12);
   hpBar.setFillStyle(pct > 0.5 ? COLORS.cyan : (pct > 0.25 ? COLORS.yellow : COLORS.red));
@@ -463,7 +470,8 @@ function spawnWeaponFx(s, w, hx, hy) {
 function hitEnemy(e, dmg, dir) {
   e.hp -= dmg;
   e.setFillStyle(0xffffff);                    /* Treffer-Flash */
-  activeScene.time.delayedCall(90, function () { if (e.active) e.setFillStyle(COLORS.red); });
+  activeScene.time.delayedCall(90, function () { if (e.active) e.setFillStyle(e.baseColor || COLORS.red); });
+  e.stunUntil = activeScene.time.now + HIT_STUN_MS;
   e.body.setVelocityX(dir * KNOCKBACK_X);      /* Knockback weg vom Spieler */
   e.body.setVelocityY(KNOCKBACK_Y);
   updateEnemyBar(e);
@@ -559,6 +567,7 @@ function spawnEnemy(s, typeId) {
   const e = s.add.rectangle(GAME_W + 60, GROUND_TOP - t.h / 2, t.w, t.h, t.color);
   s.physics.add.existing(e);
   e.etype = typeId;
+  e.baseColor = t.color;   // Treffer-Flash muss die Typfarbe zurücksetzen, nicht immer Rot
   e.hp = hp;
   e.hpMax = hp;
   e.kindLabel = s.add.text(e.x, e.y - t.h / 2 - 14, t.name, {
@@ -667,10 +676,19 @@ function resetSave() {
 
 /* ---------- Phase 4: Waffen-Ende ---------- */
 
+/* Nächster Gegner zum Spieler — Hook-Zugriff muss eindeutig sein, nicht "letzter im Array" */
+function nearestEnemy() {
+  if (!player || !enemies.length) return null;
+  return enemies.reduce(function (best, e) {
+    const d = Math.abs(e.x - player.x);
+    return (!best || d < Math.abs(best.x - player.x)) ? e : best;
+  }, null);
+}
+
 /* ---------- Debug-/Test-Hook (für automatisierte Checks) ---------- */
 window.__saga = {
   get player() { return player; },
-  get enemy() { return enemies.length ? enemies[enemies.length - 1] : null; },
+  get enemy() { return nearestEnemy(); },
   get enemies() { return enemies.slice(); },
   get hp() { return playerHP; },
   get maxHP() { return playerMaxHP; },
@@ -684,7 +702,7 @@ window.__saga = {
   get weapon() { return currentWeapon; },
   setWeapon: function (id) { switchWeapon(id); },
   get kills() { return kills; },
-  get enemyHp() { return enemies.length ? enemies[enemies.length - 1].hp : null; },
+  get enemyHp() { const e = nearestEnemy(); return e ? e.hp : null; },
   get dmg() { return playerDamage(); },
   attack: function () { tryAttack(); },
   waveComposition: function (n) { return waveComposition(n); },
