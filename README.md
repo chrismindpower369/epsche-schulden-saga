@@ -77,7 +77,7 @@ js/player.js    # Bewegung, Sprung, Angriff, Waffen, Schadenseingang
 js/enemies.js   # Gegner erzeugen, verfolgen, treffen, töten
 js/waves.js     # Kapitel-/Wellenablauf
 js/scene.js     # Szenen-Lebenszyklus (Welt, Kollisionen, Aufbau)
-js/debug.js     # Test-Hook window.__saga
+js/debug.js     # Test-Hook window.__saga (nur lokal, nicht auf der Live-Seite)
 js/main.js      # Phaser-Konfiguration und Start
 ```
 
