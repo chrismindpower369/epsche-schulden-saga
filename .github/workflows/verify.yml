@@ -1,0 +1,76 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local:
+    name: Flows auf den committeten Bytes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Chromium installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: Flows fahren (Tastatur, Gamepad, Neustart, Speichern)
+        run: npx playwright test --project=local
+
+      - name: Bericht sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-local
+          path: playwright-report
+          retention-days: 7
+
+  live:
+    name: Ausgelieferte Seite nach dem Deploy
+    needs: local
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Warten, bis Pages genau diesen Commit ausliefert
+        run: node tests/deploy-ready.mjs
+
+      - name: Chromium installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: Live-Seite fahren
+        run: npx playwright test --project=live
+
+      - name: Bericht sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-live
+          path: playwright-report
+          retention-days: 7

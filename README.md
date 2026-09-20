@@ -104,6 +104,22 @@ python -m http.server 8000
 localStorage.removeItem('epsche-schulden-saga-save-v1');
 ```
 
+## 🧪 Tests
+
+Das Spiel bleibt ein statisches HTML/JS ohne Build-Schritt — die Tests sind reine Entwicklerwerkzeuge (`node_modules` und Berichte sind gitignored):
+
+```bash
+npm install
+npx playwright install chromium
+
+npm test              # 13 Flows gegen den Arbeitsbaum: Tastatur, Gamepad-Stub, Neustart, Speichern
+npm run test:live     # wartet, bis Pages genau diesen Commit ausliefert, dann 4 Flows gegen die Live-Seite
+```
+
+- **Gamepad ohne Hardware:** `tests/pad-stub.js` ersetzt `navigator.getGamepads()` vor dem Spielstart und imitiert Verbinden/Trennen — auch das stille Verschwinden ohne Event.
+- **CI (`.github/workflows/verify.yml`):** bei jedem Push auf `main` laufen die lokalen Flows; ein zweiter Job fährt danach die deployte Seite, sobald `tests/deploy-ready.mjs` die Byte-Identität aller in `index.html` referenzierten Dateien mit diesem Commit belegt hat.
+- **Zugriff auf den Spielzustand:** Die Module liegen bewusst global in `window.Saga` (kein Build) — genau darüber lesen die Tests den Zustand, statt Pixel zu vergleichen.
+
 ## 📋 Roadmap
 
 Die aktuelle Roadmap liegt im Notion-Board **„Epsche Schulden Saga – Roadmap"**.

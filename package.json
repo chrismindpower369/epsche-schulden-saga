@@ -1,0 +1,16 @@
+{
+  "name": "epsche-schulden-saga",
+  "private": true,
+  "description": "Dev-only test harness. Das Spiel selbst bleibt ein statisches HTML/JS ohne Build-Schritt.",
+  "scripts": {
+    "serve": "node tests/serve.mjs 8123",
+    "test": "playwright test --project=local",
+    "test:live": "node tests/deploy-ready.mjs && playwright test --project=live"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
