@@ -27,24 +27,23 @@ Saga.Input = (function () {
     ['FIVE', 'dart']
   ];
 
-  /* Der Griff auf das Gamepad: normalerweise setzt ihn das 'connected'-Event.
-     Ein Pad, das Phaser schon kennt, dessen Event aber vor dem Binden gefeuert hat
-     (Controller beim Laden der Seite angeschlossen), wird hier nachgeholt — aber nur,
-     solange der Browser es noch führt: nach dem Abstecken behält Phaser den Wrapper
-     mit eingefrorenen Werten, und der darf den Griff nicht wiederbeleben. */
+  /* Der Griff auf das Gamepad, nach genau einer Regel: gültig ist nur, was der
+     Browser noch führt. Ohne Griff wird Phasers pad1 übernommen (Pad war schon vor
+     dem Binden verbunden), ein toter Griff wird gelöst. Phaser behält den Wrapper
+     nach dem Abstecken samt eingefrorenen Werten — mit oder ohne Event. */
   function livePad() {
     var S = Saga.State;
-    if (S.pad) return S.pad;
     var plugin = S.scene && S.scene.input && S.scene.input.gamepad;
-    var candidate = plugin && plugin.pad1;
-    if (!candidate || !navigator.getGamepads) return null;
-    var pads = navigator.getGamepads();
+    var candidate = S.pad || (plugin && plugin.pad1);
+    if (!candidate) return null;
+    var pads = navigator.getGamepads ? navigator.getGamepads() : null;
     for (var i = 0; pads && i < pads.length; i++) {
       if (pads[i] && pads[i].index === candidate.index) {
         S.pad = candidate;
         return candidate;
       }
     }
+    S.pad = null;
     return null;
   }
 
@@ -78,14 +77,9 @@ Saga.Input = (function () {
       Saga.State.cursors = scene.input.keyboard.createCursorKeys();
       if (scene.input.gamepad) {
         scene.input.gamepad.removeAllListeners();
+        /* Nur für einen neu angeschlossenen Pad nötig: alles andere regelt livePad()
+           bei jedem Lesen, und Phasers pad1 wird nie zurückgesetzt. */
         scene.input.gamepad.on('connected', function (p) { Saga.State.pad = p; });
-        /* Beim Trennen den Griff lösen: Phaser behält den Gamepad-Wrapper und
-           friert dessen letzte Werte ein, sonst läuft der Stickman mit dem
-           zuletzt gehaltenen Stick/Steuerkreuz endlos weiter. */
-        scene.input.gamepad.on('disconnected', function (p) {
-          if (!p || p === Saga.State.pad) Saga.State.pad = null;
-        });
-        if (scene.input.gamepad.pad1) Saga.State.pad = scene.input.gamepad.pad1;  /* falls schon verbunden */
       }
     },
 
