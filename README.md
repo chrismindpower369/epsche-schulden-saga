@@ -77,13 +77,18 @@ js/player.js    # Bewegung, Sprung, Angriff, Waffen, Schadenseingang
 js/enemies.js   # Gegner erzeugen, verfolgen, treffen, töten
 js/waves.js     # Kapitel-/Wellenablauf
 js/scene.js     # Szenen-Lebenszyklus (Welt, Kollisionen, Aufbau)
-js/debug.js     # Test-Hook window.__saga (nur lokal, nicht auf der Live-Seite)
 js/main.js      # Phaser-Konfiguration und Start
 ```
 
 Die Dateien werden als klassische Skripte in dieser Reihenfolge geladen (kein Build,
 keine ES-Module) — deshalb genügt es, `?v=` in `index.html` zu erhöhen, wenn sich eine
 Datei ändert, damit Browser nicht die alte Fassung aus dem Cache laden.
+
+Alle Module liegen dabei global in `window.Saga` (z. B. `Saga.State`, `Saga.Player`,
+`Saga.Enemies`). Das ist Absicht: ohne Build-Schritt ist der globale Namensraum die
+Schnittstelle zwischen den Dateien. Einen separaten Dev-/Test-Hook gibt es bewusst **nicht** —
+zum Prüfen im Browser dienen direkt die Module, etwa `Saga.Waves.composition(3)`,
+`Saga.State.mode` oder `Saga.State.kills`.
 
 **Lokal testen:**
 ```bash
