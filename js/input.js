@@ -27,21 +27,27 @@ Saga.Input = (function () {
     ['FIVE', 'dart']
   ];
 
+  /* Führt der Browser dieses Pad noch? Phaser behält seinen Wrapper nach dem
+     Abstecken samt eingefrorenen Werten — mit oder ohne Event. */
+  function isLive(pad) {
+    var pads = navigator.getGamepads ? navigator.getGamepads() : null;
+    for (var i = 0; pads && i < pads.length; i++) {
+      if (pads[i] && pads[i].index === pad.index) return true;
+    }
+    return false;
+  }
+
   /* Der Griff auf das Gamepad, nach genau einer Regel: gültig ist nur, was der
-     Browser noch führt. Ohne Griff wird Phasers pad1 übernommen (Pad war schon vor
-     dem Binden verbunden), ein toter Griff wird gelöst. Phaser behält den Wrapper
-     nach dem Abstecken samt eingefrorenen Werten — mit oder ohne Event. */
+     Browser noch führt. Ohne Griff wird Phasers pad1 übernommen (Pad war schon
+     vor dem Binden verbunden), ein toter Griff wird gelöst. */
   function livePad() {
     var S = Saga.State;
     var plugin = S.scene && S.scene.input && S.scene.input.gamepad;
     var candidate = S.pad || (plugin && plugin.pad1);
     if (!candidate) return null;
-    var pads = navigator.getGamepads ? navigator.getGamepads() : null;
-    for (var i = 0; pads && i < pads.length; i++) {
-      if (pads[i] && pads[i].index === candidate.index) {
-        S.pad = candidate;
-        return candidate;
-      }
+    if (isLive(candidate)) {
+      S.pad = candidate;
+      return candidate;
     }
     S.pad = null;
     return null;
@@ -68,9 +74,6 @@ Saga.Input = (function () {
   }
 
   return {
-    padDown: padDown,
-    edge: edge,
-
     /* Tastatur & Gamepad an die laufende Szene binden */
     bind: function (scene) {
       Saga.State.keys = scene.input.keyboard.addKeys('W,A,S,D,SPACE,J,K,R,Q,ONE,TWO,THREE,FOUR,FIVE');
@@ -78,8 +81,11 @@ Saga.Input = (function () {
       if (scene.input.gamepad) {
         scene.input.gamepad.removeAllListeners();
         /* Nur für einen neu angeschlossenen Pad nötig: alles andere regelt livePad()
-           bei jedem Lesen, und Phasers pad1 wird nie zurückgesetzt. */
-        scene.input.gamepad.on('connected', function (p) { Saga.State.pad = p; });
+           bei jedem Lesen, und Phasers pad1 wird nie zurückgesetzt. Auch hier gilt
+           die Regel — der Griff ist nur je ein lebendes Pad. */
+        scene.input.gamepad.on('connected', function (p) {
+          Saga.State.pad = (p && isLive(p)) ? p : null;
+        });
       }
     },
 
@@ -116,6 +122,13 @@ Saga.Input = (function () {
       var pad = livePad();
       if (!pad) return 0;
       return pad.axes.length > 0 ? pad.axes[0].getValue() : 0;
+    },
+
+    /* Steuerkreuz links/rechts als -1 / 0 / 1 (0 ohne Gamepad) */
+    padDpadX: function () {
+      if (padDown(PAD.left)) return -1;
+      if (padDown(PAD.right)) return 1;
+      return 0;
     }
   };
 })();

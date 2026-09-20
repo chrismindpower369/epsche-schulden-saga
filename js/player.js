@@ -30,12 +30,11 @@ Saga.Player = (function () {
     if (keys.A.isDown || cursors.left.isDown) vx = -speed;
     else if (keys.D.isDown || cursors.right.isDown) vx = speed;
 
-    if (S.pad) {
-      var ax = Saga.Input.padAxisX();
-      if (Math.abs(ax) > 0.15) vx = ax * speed;
-      if (Saga.Input.padDown(14)) vx = -speed;   /* D-Pad links */
-      if (Saga.Input.padDown(15)) vx = speed;    /* D-Pad rechts */
-    }
+    var ax = Saga.Input.padAxisX();
+    if (Math.abs(ax) > 0.15) vx = ax * speed;
+    var dpad = Saga.Input.padDpadX();
+    if (dpad < 0) vx = -speed;
+    if (dpad > 0) vx = speed;
 
     S.player.body.setVelocityX(vx);
     if (vx < 0) S.facing = -1; else if (vx > 0) S.facing = 1;
