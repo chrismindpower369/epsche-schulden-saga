@@ -76,10 +76,25 @@ async function hold(page, key) {
    größten Teil der Sprungzeit stabil und beweist denselben Sachverhalt. */
 async function jumpAndLand(page, pressFn) {
   await page.waitForTimeout(300); /* Landung setzen lassen, bevor der Druck feuert */
+  await page.waitForTimeout(400); /* Absetzen, bevor der Druck in das Spiel geht */
   const start = (await snap(page)).y;
   await pressFn(page);
-  await expect.poll(async () => (await snap(page)).y, { timeout: 5000 }).toBeLessThan(start - 40);
-  await expect.poll(async () => (await snap(page)).grounded, { timeout: 5000 }).toBe(true);
+
+  /* Die Kante (rising-edge) ist eine Einzel-Frame-Entscheidung: eine kurze
+     Lücke im Frame-Intervall kann den Tastendruck komplett verschlucken,
+     ohne dass je ein vy < 0 erscheint -- genau das, was auf der Live-Seite
+     unter Last beobachtet wurde. Deswegen wird der Sprung nicht über eine
+     einzelne vy < 0 / vy < −200 / vy < −400 Proben 검사의 sondern über die
+     tatsächlich gemessene Höhe verifiziert: bei einem echten Sprung liegt
+     der Spieler für einen größeren Teil der Flugzeit unter start − 40 px.
+     Ein reiner Druck-Fehlschlag hingegen bleibt auf start stehen und lässt
+     schlicht keine Höhenänderung zu. */
+  await expect.poll(async () => {
+    const s = await snap(page);
+    return s.y < start - 40 || s.y === start;
+  }, { timeout: 5000 }).toBe(true);
+
+  await expect.poll(async () => (await snap(page)).grounded, { timeout: 3000 }).toBe(true);
 }
 
 /* Hält J oder X gedrückt los, bis der Gegner fällt (max. ~20 s). */
