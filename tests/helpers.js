@@ -100,9 +100,14 @@ async function padButton(page, index, down) {
   await page.evaluate(({ index, down }) => window.__pad.setButton(index, down), { index, down });
 }
 
+/* Haltdauer über dem schlimmsten zu erwartenden Frame-Intervall halten:
+   Bei parallelen Workern kann ein Frame-Look deutlich über 200 ms liegen —
+   ein kürzerer Druck fällt dann komplett in die Lücke und Phaser sieht
+   die Kante nie (auf Live zweimal beobachtet). Kanten feuern pro Druck
+   genau einmal, ein längerer Halt ändert am Verhalten also nichts. */
 async function tapPad(page, index, ms) {
   await padButton(page, index, true);
-  await page.waitForTimeout(ms || 120);
+  await page.waitForTimeout(ms || 300);
   await padButton(page, index, false);
 }
 

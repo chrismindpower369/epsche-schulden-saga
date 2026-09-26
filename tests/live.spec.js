@@ -39,7 +39,7 @@ test.describe('GitHub Pages', () => {
     await expect.poll(async () => (await snap(page)).vx).toBe(0);
 
     await expect.poll(async () => (await snap(page)).grounded, { timeout: 5000 }).toBe(true);
-    await jumpAndLand(page, p => press(p, 'w', 200));
+    await jumpAndLand(page, p => press(p, 'w', 300));
   });
 
   test('Gamepad: wird ohne Event übernommen und tötet', async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe('GitHub Pages', () => {
     await expect.poll(async () => (await snap(page)).mode, { timeout: 5000 }).toBe('over');
     expect((await snap(page)).texts).toContain('NIEDERLAGE');
 
-    await press(page, 'r', 200);
+    await press(page, 'r', 300);
     await expect.poll(async () => (await snap(page)).mode, { timeout: 10000 }).toBe('play');
     const alive = await snap(page);
     expect(alive.texts).toContain('Kapitel 1');

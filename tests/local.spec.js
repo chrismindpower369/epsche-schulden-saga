@@ -56,7 +56,7 @@ test.describe('lokaler Stand', () => {
     await expect.poll(async () => (await snap(page)).grounded, { timeout: 5000 }).toBe(true);
     const before = await snap(page);
 
-    await jumpAndLand(page, p => press(p, 'w', 200));
+    await jumpAndLand(page, p => press(p, 'w', 300));
 
     // springt senkrecht: zurück am Startpunkt
     const after = await snap(page);
@@ -65,15 +65,15 @@ test.describe('lokaler Stand', () => {
 
   test('Tastatur: Waffen 1–5 und Q', async ({ page }) => {
     await boot(page);
-    await press(page, '2', 200);
+    await press(page, '2', 300);
     await expect.poll(async () => (await snap(page)).weapon).toBe('dragon');
-    await press(page, '3', 200);
+    await press(page, '3', 300);
     await expect.poll(async () => (await snap(page)).weapon).toBe('contact');
-    await press(page, '4', 200);
+    await press(page, '4', 300);
     await expect.poll(async () => (await snap(page)).weapon).toBe('poi');
-    await press(page, '5', 200);
+    await press(page, '5', 300);
     await expect.poll(async () => (await snap(page)).weapon).toBe('dart');
-    await press(page, 'q', 200);
+    await press(page, 'q', 300);
     await expect.poll(async () => (await snap(page)).weapon).toBe('sword');
   });
 
@@ -82,7 +82,7 @@ test.describe('lokaler Stand', () => {
     await boot(page);
     const before = await powerUp(page);
 
-    const run = await attackUntil(page, s => s.kills > before.kills, p => press(p, 'j', 120), 25000);
+    const run = await attackUntil(page, s => s.kills > before.kills, p => press(p, 'j', 300), 25000);
     expect(run.satisfied, 'kein Kill im Zeitfenster').toBe(true);
 
     const after = await snap(page);
@@ -95,7 +95,7 @@ test.describe('lokaler Stand', () => {
     await boot(page);
     await powerUp(page);
 
-    const run = await attackUntil(page, s => s.waveState !== 'running', p => press(p, 'j', 120), 60000);
+    const run = await attackUntil(page, s => s.waveState !== 'running', p => press(p, 'j', 300), 60000);
     expect(run.satisfied, 'Kapitel 1 nicht geschafft').toBe(true);
 
     const cleared = await snap(page);
@@ -116,7 +116,7 @@ test.describe('lokaler Stand', () => {
     expect(dead.texts).toContain('NIEDERLAGE');
     expect(dead.texts.join(' | ')).toContain('R oder Start für Neustart');
 
-    await press(page, 'r', 200);
+    await press(page, 'r', 300);
     await expect.poll(async () => (await snap(page)).mode, { timeout: 10000 }).toBe('play');
 
     const alive = await snap(page);
